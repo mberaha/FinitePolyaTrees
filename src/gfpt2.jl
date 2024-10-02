@@ -1,7 +1,7 @@
 using AddPackage
 @add using SpecialFunctions
 
-include("polyatree.jl")
+include("finite_pt.jl")
 include("utils.jl")
 
 
