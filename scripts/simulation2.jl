@@ -2,10 +2,10 @@ include("../src/polyatree.jl")
 include("../src/partitions.jl")
 include("simulation_utils.jl")
 
-using Distributions
-using DataFrames
-using Serialization
-using ProgressBars
+@add using Distributions
+@add using DataFrames
+@add using Serialization
+@add using ProgressBars
 
 
 NREP = 100
@@ -29,8 +29,7 @@ DG = [DG1, DG2, DG3, DG4, DG4, DG5, DG6]
 
 TRUE_DENS = [pdf.(d, XGRID) for d in DG]
 
-# Tuples of "model-id" and "alpha0". For all models max_depth is 10
-# and beta0 = alpha0
+
 MAX_DEPTH = 10
 PRIORS = [
     ("GFPT1", 0.05, -1, false),

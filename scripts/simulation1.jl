@@ -2,10 +2,10 @@ include("../src/polyatree.jl")
 include("../src/partitions.jl")
 include("simulation_utils.jl")
 
-using Distributions
-using DataFrames
-using Serialization
-using ProgressBars
+@add using Distributions
+@add using DataFrames
+@add using Serialization
+@add using ProgressBars
 
 
 NREP = 100

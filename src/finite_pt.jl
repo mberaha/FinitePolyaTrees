@@ -2,11 +2,11 @@ include("partitions.jl")
 include("binary_tree.jl")
 include("utils.jl")
 
-using Integrals
-using StatsBase
-using Distributions
-using SpecialFunctions
-using NNlib
+@add using Integrals
+@add using StatsBase
+@add using Distributions
+@add using SpecialFunctions
+@add using NNlib
 
 mutable struct PolyaTree
     # state

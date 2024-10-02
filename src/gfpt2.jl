@@ -1,5 +1,5 @@
-using SpecialFunctions
-using ProgressBars
+@add using SpecialFunctions
+@add using ProgressBars
 
 include("polyatree.jl")
 include("utils.jl")
@@ -71,22 +71,6 @@ function GFPT2(prior_n::Distribution, max_n=Int64,
 end
 
 # POSTERIOR
-
-function update_counts!(data, pt::GFPT2)
-    # pt_to_interval = mapreduce(
-    #     permutedims, vcat, find_intervals.(data, Ref(pt.partition)))
-     
-    # new_alphas = pt.alphas
-    # new_counts = pt.counts
-    # for l in 1:pt.partition.depth
-    #     counts = countmap(pt_to_interval[:, l])
-    #     for (idx, c) in counts
-    #         new_alphas[l][idx] += c
-    #         new_counts[l][idx] += c
-    #     end
-    # end
-    return pt
-end
 
 function update_counts_and_alphas(data, endpoints, pt)
     function intervals_from_endpoints(x, endpoints)
