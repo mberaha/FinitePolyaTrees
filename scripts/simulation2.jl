@@ -20,7 +20,7 @@ DG2 = MixtureModel([
     Uniform(0.5, 1.0)], [1/6, 1/2, 1/3])
 DG3 = truncated(Normal(0.5, 0.1), 0.0, 1.0)
 DG4 = Uniform(0, 0.2)
-DG4 = MixtureModel([
+DG5 = MixtureModel([
     Uniform(0, 0.2),
     Uniform(0.7, 0.9)], [2/3, 1/3])
 DG6 = MixtureModel([
