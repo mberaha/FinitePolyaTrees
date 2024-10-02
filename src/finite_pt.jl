@@ -2,6 +2,7 @@ include("partitions.jl")
 include("binary_tree.jl")
 include("utils.jl")
 
+using AddPackage
 @add using Integrals
 @add using StatsBase
 @add using Distributions

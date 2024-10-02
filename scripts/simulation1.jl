@@ -2,6 +2,7 @@ include("../src/polyatree.jl")
 include("../src/partitions.jl")
 include("simulation_utils.jl")
 
+using AddPackage
 @add using Distributions
 @add using DataFrames
 @add using Serialization

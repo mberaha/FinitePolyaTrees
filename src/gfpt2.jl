@@ -1,5 +1,5 @@
+using AddPackage
 @add using SpecialFunctions
-@add using ProgressBars
 
 include("polyatree.jl")
 include("utils.jl")
