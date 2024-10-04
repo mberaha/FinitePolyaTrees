@@ -6,12 +6,12 @@ using AddPackage
 @add using Distributions
 @add using DataFrames
 @add using Serialization
-@add using ProgressBars
 
 
-NREP = 100
-NDATAS = [50, 100, 250, 500, 750, 1000]
+NREP = 96
+NDATAS = [50, 100, 250, 500] #, 750, 1000]
 XGRID = collect(LinRange(1e-8, 1-1e-8, 1000))
+
 
 DG1 = Uniform(0, 0.5)
 DG2 = MixtureModel([
@@ -27,11 +27,12 @@ DG6 = MixtureModel([
     Beta(2, 15),
     Beta(15, 2)], [1/2, 1/2])
 DG = [DG1, DG2, DG3, DG4, DG4, DG5, DG6]
+# DG = [DG1, DG4]
 
 TRUE_DENS = [pdf.(d, XGRID) for d in DG]
 
 
-MAX_DEPTH = 10
+MAX_DEPTH = 8
 PRIORS = [
     ("GFPT1", 0.05, -1, false),
     ("GFPT1", 0.1, -1, false),
@@ -45,6 +46,7 @@ PRIORS = [
     ("GFPT2", 0.1, 5.0, false)
 ]
 
+
 function build_model(model_id, alpha0, beta0, increasing_beta)
     if model_id == "GFPT1"
         return GFPT1(Poisson(5.0), MAX_DEPTH, alpha0)
@@ -55,8 +57,9 @@ function build_model(model_id, alpha0, beta0, increasing_beta)
     end
 end
 
+
 function get_posterior_summaries(pt::GFPT2, data)
-    mcmc_chain = run_mcmc(data, pt, 10000, 5000, 1);
+    mcmc_chain = run_mcmc(data, pt, 1000, 500, 1);
     pred_dens = predictive_density(XGRID, mcmc_chain)
     post_n_proba = zeros(MAX_DEPTH)
     for tree in mcmc_chain
@@ -77,9 +80,12 @@ function get_posterior_summaries(pt::GFPT1, data)
 end
 
 
+println("1")
+
 function run_one_iter(iternum)
     out = []
-
+    println("Run one iter # ", iternum)
+    flush(stdout)
     for prior in PRIORS
         for (i, data_distribution) in enumerate(DG)
             for ndata in NDATAS
@@ -99,13 +105,21 @@ function run_one_iter(iternum)
             end
         end
     end
-    return DataFrame(out, ["Model", "alpha0", "beta0", "increasing_beta", "DataGen", 
-                           "Ndata", "L1", "LENGTH", "POST_N", "ITER"])
+    
+    println("Finished iter # ", iternum)
+    flush(stdout)
+    out = DataFrame(out, ["Model", "alpha0", "beta0", "increasing_beta", "DataGen", 
+                          "Ndata", "L1", "LENGTH", "POST_N", "ITER"])
+    
+    # Serialization.serialize("simulation2_"*string(iternum)*".dta", out)
+    return out
 end
 
+
 function main()
+    println("main")
     tmp =  Array{DataFrame}(undef, NREP)
-    @Threads.threads for i in ProgressBar(1:NREP)
+    @Threads.threads for i in 1:NREP
         tmp[i] = run_one_iter(i)
     end
     out = reduce(vcat, tmp)
