@@ -3,14 +3,19 @@ include("../src/partitions.jl")
 include("simulation_utils.jl")
 
 using AddPackage
+using Random
 @add using Distributions
 @add using DataFrames
 @add using Serialization
 
 
+
 NREP = 96
 NDATAS = [50, 100, 250, 500] #, 750, 1000]
 XGRID = collect(LinRange(1e-8, 1-1e-8, 1000))
+
+Random.seed!(20241004)
+SEEDS = rand(1:10_000_000, NREP)
 
 
 DG1 = Uniform(0, 0.5)
@@ -80,8 +85,6 @@ function get_posterior_summaries(pt::GFPT1, data)
 end
 
 
-println("1")
-
 function run_one_iter(iternum)
     out = []
     println("Run one iter # ", iternum)
@@ -118,12 +121,10 @@ end
 
 function main()
     println("main")
-    tmp =  Array{DataFrame}(undef, NREP)
-    @Threads.threads for i in 1:NREP
-        tmp[i] = run_one_iter(i)
-    end
-    out = reduce(vcat, tmp)
-    Serialization.serialize("simulation2_results.dta", out)
+    iternum = parse(Int, ARGS[1])
+    Random.seed!(SEEDS[iternum])
+    out = run_one_iter(iternum)
+    Serialization.serialize("out/simulation2_"*string(iternum)*".dta", out)
 end
 
 main()
