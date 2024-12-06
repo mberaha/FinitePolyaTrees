@@ -31,7 +31,7 @@ DG5 = MixtureModel([
 DG6 = MixtureModel([
     Beta(2, 15),
     Beta(15, 2)], [1/2, 1/2])
-DG = [DG1, DG2, DG3, DG4, DG4, DG5, DG6]
+DG = [DG1, DG2, DG3, DG4, DG5, DG6]
 # DG = [DG1, DG4]
 
 TRUE_DENS = [pdf.(d, XGRID) for d in DG]
