@@ -1,4 +1,5 @@
 using AddPackage
+using Base.Threads
 @add using SpecialFunctions
 
 include("finite_pt.jl")
@@ -24,7 +25,7 @@ function GFPT2(partition_relative_lengths, partition_endpoints, partition_length
               prob_n, prior_alphas, prior_betas)
 
     alphas = Vector{Vector{Float64}}()
-    curr_n = argmax(prob_n)
+    curr_n = 1
     return GFPT2(partition_relative_lengths, partition_endpoints, partition_lengths, counts,
                  prob_n, prior_alphas, prior_betas, alphas, curr_n)
 
@@ -102,6 +103,61 @@ function update_counts_and_alphas(data, endpoints, pt)
 
 end
 
+function update_counts_and_alphas_parallel(data, endpoints, pt)
+    depth = length(endpoints)
+    ndata = length(data)
+    
+    # Preallocate a matrix for interval indices.
+    pt_to_interval = Array{Int}(undef, ndata, depth)
+    
+    # Parallel fill: each data point is independent.
+    @threads for i in 1:ndata
+        x = data[i]
+        # Find the interval index. (Assuming find_interval is efficient.)
+        idx = find_interval(x, endpoints[end])
+        tmp = idx - 1  # Adjust for binary digit extraction.
+        val = 0
+        # Compute the interval indices using bit operations.
+        for l in 1:depth
+            digit = (tmp >> (depth - l)) & 1
+            val = (val << 1) | digit
+            pt_to_interval[i, l] = val + 1
+        end
+    end
+
+    # Determine the number of threads.
+    nthreads = Threads.nthreads()
+    
+    # Create thread-local storage for new_alphas and new_counts.
+    # Each thread gets its own copy per level.
+    new_alphas_local = [ [ zeros(eltype(pt.prior_alphas[l]), length(pt.prior_alphas[l])) for l in 1:depth ] for t in 1:nthreads ]
+    new_counts_local  = [ [ zeros(eltype(pt.counts[l]), length(pt.counts[l])) for l in 1:depth ] for t in 1:nthreads ]
+    
+    # Parallel accumulation over data points.
+    @threads for i in 1:ndata
+        tid = threadid()  # Get current thread ID.
+        for l in 1:depth
+            idx = pt_to_interval[i, l]
+            new_alphas_local[tid][l][idx] += 1
+            new_counts_local[tid][l][idx]  += 1
+        end
+    end
+
+    # Reduce (sum) thread-local results into the final new_alphas and new_counts.
+    new_alphas = deepcopy(pt.prior_alphas[1:depth])
+    new_counts = [ zeros(eltype(pt.counts[l]), length(pt.counts[l])) for l in 1:depth ]
+    
+    for t in 1:nthreads
+        for l in 1:depth
+            new_alphas[l] .+= new_alphas_local[t][l]
+            new_counts[l] .+= new_counts_local[t][l]
+        end
+    end
+
+    return new_counts, new_alphas
+end
+
+
 function sample_n!(data, pt::GFPT2)
     depth = length(pt.prior_prob_n)
     
@@ -143,7 +199,8 @@ function sample_r!(data, pt::GFPT2)
     prop_rel_lenghts = sample_beta_sequence(pt.prior_betas[1:curr_n])
     prop_lenghts = lengths_from_relative_lengths(prop_rel_lenghts)
     prop_endpoints = endpoints_from_lengths(prop_lenghts)
-    prop_counts, prop_alphas = update_counts_and_alphas(data, prop_endpoints, pt)
+    prop_counts, prop_alphas = update_counts_and_alphas_parallel(
+        data, prop_endpoints, pt)
 
     log_a_rate = (marg_log_lik(prop_alphas, prop_lenghts, prop_counts) -
         marg_log_lik(pt.curr_alphas[1:curr_n], pt.partition_lengths[1:curr_n], 
@@ -165,15 +222,16 @@ function sample_r!(data, pt::GFPT2)
 
     pt.partition_lengths = lengths_from_relative_lengths(pt.partition_relative_lengths)
     pt.partition_endpoints = endpoints_from_lengths(pt.partition_lengths)
-    pt.counts, pt.curr_alphas = update_counts_and_alphas(data, pt.partition_endpoints, pt)
+    pt.counts, pt.curr_alphas = update_counts_and_alphas_parallel(
+        data, pt.partition_endpoints, pt)
 
     return pt
 end
 
-function run_mcmc(
-        data, pt, burnin, iter, thin=1, xgrid=collect(LinRange(1e-8, 1-1e-8, 1000)))
+function run_mcmc(data, pt, burnin, iter, thin=1)
 
-    pt.counts, pt.curr_alphas = update_counts_and_alphas(data, pt.partition_endpoints, pt)
+    pt.counts, pt.curr_alphas = update_counts_and_alphas_parallel(
+        data, pt.partition_endpoints, pt)
 
     for _ in 1:burnin
         pt = sample_r!(data, pt);
@@ -197,13 +255,13 @@ end
 # PREDICTIVE
 function predictive_density(xgrid::Array{Float64}, gfpt::GFPT2)
     """
-    We assume xgrid is already sorted and equispaced
+    We assume xgrid is already sorted
     """
 
     n = gfpt.curr_n
     partitions = NestedPartitions(
         [SimplePartition(gfpt.partition_endpoints[depth]) for depth in 1:n])
-    simple_pt = PolyaTree(partitions, gfpt.curr_alphas[1:n], gfpt.counts[1:n])
+    simple_pt = PolyaTree(partitions, 2, gfpt.curr_alphas[1:n], gfpt.counts[1:n])
 
     return predictive_density(xgrid, simple_pt)
 end
@@ -216,4 +274,25 @@ function predictive_density(xgrid::Array{Float64}, pt_chain=Vector{GFPT2})
         pred_dens .+= predictive_density(xgrid, pt)
     end
     pred_dens ./= length(pt_chain)
+end
+
+
+function log_lik(data::Vector{Float64}, gfpt::GFPT2)
+    perm = sortperm(data)
+    inverse_perm = invperm(perm)
+    sorted_data = data[perm]
+
+    log_liks = log.(predictive_density(sorted_data, gfpt))
+
+    return log_liks[inverse_perm]
+end
+
+
+function log_lik_chain(data::Vector{Float64}, pt_chain=Vector{GFPT2}, N_MC=-1)
+    out = zeros(length(pt_chain), length(data))
+    @threads for i in 1:length(pt_chain)
+        out[i, :] .=  log_lik(data, pt_chain[i])
+    end
+
+    return out
 end

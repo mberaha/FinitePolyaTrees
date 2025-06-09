@@ -9,7 +9,7 @@ using AddPackage
 @add using ProgressBars
 
 
-NREP = 100
+NREP = 50
 NDATAS = [50, 100, 1000, 5000, 10000]
 XGRID = collect(LinRange(1e-8, 1-1e-8, 1000))
 
@@ -27,20 +27,21 @@ TRUE_DENS = [pdf.(d, XGRID) for d in DG]
 # and beta0 = alpha0
 MAX_DEPTH = 10
 PRIORS = [
-    ("PT", 2.0),
     ("PT", 0.05),
+    ("PT", 0.1),
+    ("PT", 2.0),
     ("PT", 10.0),
-    ("GFPT1", 2.0),
     ("GFPT1", 0.05),
+    ("GFPT1", 0.1),
+    ("GFPT1", 2.0),
     ("GFPT1", 10.0),
 ]
 
 function build_model(model_id, alpha0)
-    beta0 = alpha0
     if model_id == "PT"
-        return PolyaTree(MAX_DEPTH, alpha0, beta0)
+        return PolyaTree(MAX_DEPTH, alpha0)
     elseif model_id == "GFPT1"
-        return GFPT1(Poisson(5.0), MAX_DEPTH, alpha0, beta0)
+        return GFPT1(Poisson(5.0), MAX_DEPTH, alpha0)
     else 
         throw("Non-reckognized model_id: '$model_id' ")
     end
