@@ -1,6 +1,15 @@
 include("finite_pt.jl")
 include("utils.jl")
 
+"""
+    GFPT1
+
+Gaussian finite Polya tree where the depth is random.
+
+# Fields
+- `pt::PolyaTree` : underlying finite Polya tree.
+- `prob_n::Vector{Float64}` : prior probabilities for the number of levels.
+"""
 mutable struct GFPT1
     pt::PolyaTree
     prob_n::Vector{Float64}
@@ -9,13 +18,25 @@ end
 
 # COSTRUCTORS
 
-function GFPT1(p::NestedPartitions, prior_n::Vector{Float64}, 
+"""
+    GFPT1(p::NestedPartitions, prior_n::Vector{Float64}; alpha0=1, base=2)
+
+Create a `GFPT1` model with a fixed partition `p` and prior probabilities
+`prior_n` on the depth.
+"""
+function GFPT1(p::NestedPartitions, prior_n::Vector{Float64},
               alpha0=1, base=2)
     @assert(length(p) == length(prior_n))
     pt = PolyaTree(p, alpha0, base)
     return GFPT1(pt, prior_n)
 end
 
+"""
+    GFPT1(prior_n::Distribution, max_n::Int64; alpha0=1, base=2)
+
+Construct a `GFPT1` where the partition has at most `max_n` levels and the
+prior on the depth is given by `prior_n`.
+"""
 function GFPT1(prior_n::Distribution, max_n=Int64,
                alpha0=1, base=2)
     depth = max_n
@@ -33,7 +54,14 @@ function GFPT1(prior_n::Distribution, max_n=Int64,
 end
 
 
-function BenfordGFPT1(prior_n::Distribution, max_n::Int64, alphas::Vector{Float64}, 
+"""
+    BenfordGFPT1(prior_n::Distribution, max_n::Int64,
+                 alphas::Vector{Float64}, base::Int64)
+
+Construct a `GFPT1` where the underlying Polya tree is initialised to follow
+Benford's law.
+"""
+function BenfordGFPT1(prior_n::Distribution, max_n::Int64, alphas::Vector{Float64},
                       base::Int64)
 
     pt = BenfordPT(max_n, alphas, base)
@@ -49,6 +77,11 @@ end
 
 # POSTERIOR
 
+"""
+    update(data::Vector{Float64}, pt::GFPT1)
+
+Update the `GFPT1` object with the observations in `data`.
+"""
 function update(data::Vector{Float64}, pt::GFPT1)
     post_tree = update(data, pt.pt)
     base = pt.pt.base
@@ -82,15 +115,24 @@ end
 
 # PREDICTIVE
 
+"""
+    get_nested_lengths(pt::PolyaTree, binseq::Vector{Int})
+
+Return the lengths of all sub-intervals corresponding to prefixes of
+`binseq`.
+"""
 function get_nested_lengths(pt::PolyaTree, binseq::Array{Int})
     return get_length.(Ref(pt), get_subarrays(binseq))
 end
 
 
+"""
+    predictive_density(xgrid::Vector{Float64}, gfpt::GFPT1; proba_threshold=1e-6)
+
+Predictive density of the GFPT1 model evaluated on `xgrid`.
+`xgrid` must be sorted.
+"""
 function predictive_density(xgrid::Array{Float64}, gfpt::GFPT1, proba_threshold=1e-6)
-    """
-    We assume xgrid is already sorted
-    """
     pt = gfpt.pt
     prob_n = gfpt.prob_n
 
@@ -144,6 +186,11 @@ function predictive_density(xgrid::Array{Float64}, gfpt::GFPT1, proba_threshold=
 end
 
 
+"""
+    sample_pt_density(xgrid::Vector{Float64}, gfpt::GFPT1)
+
+Sample a random density from the posterior `gfpt` and evaluate it on `xgrid`.
+"""
 function sample_pt_density(xgrid::Array{Float64}, gfpt::GFPT1)
     depth = rand(Categorical(gfpt.prob_n))
 
@@ -166,6 +213,11 @@ function sample_pt_density(xgrid::Array{Float64}, gfpt::GFPT1)
 end
 
 
+"""
+    sample_log_lik(data::Vector{Float64}, gfpt::GFPT1)
+
+Draw one density from `gfpt` and return the log-likelihood of `data`.
+"""
 function sample_log_lik(data::Vector{Float64}, gfpt::GFPT1)
     perm = sortperm(data)
     inverse_perm = invperm(perm)
@@ -177,6 +229,11 @@ function sample_log_lik(data::Vector{Float64}, gfpt::GFPT1)
 end
 
 
+"""
+    log_lik_chain(data::Vector{Float64}, gfpt::GFPT1, N_MC=1000)
+
+Monte Carlo estimate of the log-likelihood over `N_MC` posterior draws.
+"""
 function log_lik_chain(data::Vector{Float64}, gfpt::GFPT1, N_MC=1000)
     out = zeros(N_MC, length(data))
     for (i, pt) in enumerate(pt_chain)

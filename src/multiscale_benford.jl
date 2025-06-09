@@ -2,6 +2,18 @@ include("utils.jl")
 include("gfpt1.jl")
 
 
+"""
+    MultiscaleBPT
+
+Model for multiscale Benford analysis combining a GFPT1 tree with a Dirichlet
+prior on orders of magnitude.
+
+# Fields
+- `tree` : underlying `GFPT1` object.
+- `etas` : Dirichlet parameters for the magnitude distribution.
+- `min_order`, `max_order` : range of considered magnitudes.
+- `base` : numerical base used for scaling.
+"""
 mutable struct MultiscaleBPT
     tree::GFPT1
     etas::Vector{Float64}
@@ -11,9 +23,15 @@ mutable struct MultiscaleBPT
 end
 
 
+"""
+    MultiscaleBPT(prior_n::Distribution, max_n::Int64, alpha0::Float64,
+                  etas::Vector{Float64}; min_order=0, base=10)
+
+Construct a multiscale Benford Polya tree model.
+"""
 function MultiscaleBPT(
-        prior_n::Distribution, max_n::Int64, alpha0::Float64, 
-        etas::Vector{Float64}, min_order=0, base=10)
+          prior_n::Distribution, max_n::Int64, alpha0::Float64,
+          etas::Vector{Float64}, min_order=0, base=10)
 
     alphas = Vector{Float64}()
     for l in 1:max_n
@@ -29,6 +47,11 @@ function MultiscaleBPT(
 end
 
 
+"""
+    update(data::Vector{Float64}, pt::MultiscaleBPT)
+
+Update both the magnitude and tree parameters with `data`.
+"""
 function update(data::Vector{Float64}, pt::MultiscaleBPT)
     scaled_data, magnitudes = scale_and_magnitudes(data, pt.base)
 
@@ -44,6 +67,11 @@ function update(data::Vector{Float64}, pt::MultiscaleBPT)
 end
 
 
+"""
+    sample_log_lik(data::Vector{Float64}, bpt::MultiscaleBPT)
+
+Sample a log-likelihood value from the multiscale model.
+"""
 function sample_log_lik(data::Array{Float64}, bpt::MultiscaleBPT)
     scaled_data, magnitudes = scale_and_magnitudes(data, bpt.base)
 
@@ -63,6 +91,11 @@ function sample_log_lik(data::Array{Float64}, bpt::MultiscaleBPT)
     return out
 end
 
+"""
+    log_lik_chain(data::Vector{Float64}, pt::MultiscaleBPT, N_MC=1000)
+
+Monte Carlo log-likelihoods for the multiscale model.
+"""
 function log_lik_chain(data::Vector{Float64}, pt::MultiscaleBPT, N_MC=1000)
     out = zeros(N_MC, length(data))
     for (i, pt) in enumerate(pt_chain)
