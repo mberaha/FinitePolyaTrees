@@ -10,25 +10,40 @@ end
 # COSTRUCTORS
 
 function GFPT1(p::NestedPartitions, prior_n::Vector{Float64}, 
-              alpha0=1)
+              alpha0=1, base=2)
     @assert(length(p) == length(prior_n))
-    pt = PolyaTree(p, alpha0)
+    pt = PolyaTree(p, alpha0, base)
     return GFPT1(pt, prior_n)
 end
 
 function GFPT1(prior_n::Distribution, max_n=Int64,
-               alpha0=1)
+               alpha0=1, base=2)
     depth = max_n
     partitions = Vector{SimplePartition}()
     prob_n = zeros(max_n)
     for d in 1:depth
-        endpoints = collect(LinRange(0, 1, 2^d + 1))
+        endpoints = collect(LinRange(0, 1, base^d + 1))
         partitions = push!(partitions, SimplePartition(endpoints))
         prob_n[d] = pdf(prior_n, d)
     end
     prob_n ./= sum(prob_n)
     partitions = NestedPartitions(partitions)
-    pt = PolyaTree(partitions, alpha0)
+    pt = PolyaTree(partitions, alpha0, base)
+    return GFPT1(pt, prob_n)
+end
+
+
+function BenfordGFPT1(prior_n::Distribution, max_n::Int64, alphas::Vector{Float64}, 
+                      base::Int64)
+
+    pt = BenfordPT(max_n, alphas, base)
+
+    prob_n = zeros(max_n)
+    for d in 1:max_n
+        prob_n[d] = pdf(prior_n, d)
+    end
+    prob_n ./= sum(prob_n)
+
     return GFPT1(pt, prob_n)
 end
 
@@ -36,21 +51,32 @@ end
 
 function update(data::Vector{Float64}, pt::GFPT1)
     post_tree = update(data, pt.pt)
-
+    base = pt.pt.base
     m = post_tree.partition.depth
     log_probas_n = zeros(m)
-    log_numerator = 0
+    log_probas_num = zeros(m)
+    log_probas_den = zeros(m)
 
+
+    log_numerator = 0
     for i in 1:m
         log_denominator = 0
         curr_alphas = post_tree.alphas[i]
-        for j in 1:2:length(curr_alphas)
-            log_numerator +=  logbeta(curr_alphas[j], curr_alphas[j+1]) 
+        for j in 1:base:length(curr_alphas)
+            tmp =  curr_alphas[j:(j+base-1)]
+            if all(tmp .== 0)
+                continue
+            else 
+                tmp = tmp[tmp .> 0]
+            end
+            # println("alphas: ", tmp, ", contrib: ", log_mv_beta(tmp))
+            log_numerator += log_mv_beta(tmp) 
         end
         log_denominator = sum(log.(post_tree.partition.lengths[i]) .* post_tree.counts[i]) 
         log_probas_n[i] = log(pt.prob_n[i]) + log_numerator - log_denominator 
+        log_probas_num[i] = log_numerator
+        log_probas_den[i] = log_denominator
     end
-
     return GFPT1(post_tree, softmax(log_probas_n))
 end
 
@@ -63,7 +89,7 @@ end
 
 function predictive_density(xgrid::Array{Float64}, gfpt::GFPT1, proba_threshold=1e-6)
     """
-    We assume xgrid is already sorted and equispaced
+    We assume xgrid is already sorted
     """
     pt = gfpt.pt
     prob_n = gfpt.prob_n
@@ -75,21 +101,20 @@ function predictive_density(xgrid::Array{Float64}, gfpt::GFPT1, proba_threshold=
     m = pt.partition.depth
 
     dens_cumprod = zeros(m)
-    curr_binseq = digits(idxs[1][end] - 1, base=2, pad=m) |> reverse
+    curr_binseq = digits(idxs[1][end] - 1, base=pt.base, pad=m) |> reverse
     
-    dens_cumprod[1] = get_alpha(pt, curr_binseq[1:1]) / (
-        get_alpha(pt, [0]) + get_alpha(pt, [1]) )
+    dens_cumprod[1] = get_alpha(pt, curr_binseq[1:1]) / sum(
+        get_next_alphas(pt, Int[]) )
     for j in 2:m
-        dens_cumprod[j] = dens_cumprod[j - 1] * get_alpha(pt, curr_binseq[1:j]) / (
-            get_alpha(pt, push!(curr_binseq[1:j-1], 0)) + get_alpha(pt, push!(curr_binseq[1:j-1], 1))
-        )
+        dens_cumprod[j] = dens_cumprod[j - 1] * get_alpha(pt, curr_binseq[1:j]) / sum(
+            get_next_alphas(pt, curr_binseq[1:j-1]))
     end
     # out[1] = dens_cumprod[end] / get_length(pt, curr_binseq)
     out[1] = sum(prob_n .* dens_cumprod ./ get_nested_lengths(pt, curr_binseq))
 
     old_binseq = curr_binseq
     for i in 2:length(xgrid)
-        curr_binseq = digits(idxs[i][end] - 1, base=2, pad=m) |> reverse
+        curr_binseq = digits(idxs[i][end] - 1, base=pt.base, pad=m) |> reverse
         if (curr_binseq == old_binseq)
             # out[i] = dens_cumprod[end] / get_length(pt, curr_binseq)
             out[i] = sum(prob_n .* dens_cumprod ./ get_nested_lengths(pt, curr_binseq))
@@ -98,18 +123,16 @@ function predictive_density(xgrid::Array{Float64}, gfpt::GFPT1, proba_threshold=
 
         first_diff = argmin(curr_binseq .== old_binseq)
         if first_diff == 1
-            dens_cumprod[1] = get_alpha(pt, curr_binseq[1:1]) / (
-                get_alpha(pt, [0]) + get_alpha(pt, [1]) )
+            dens_cumprod[1] = get_alpha(pt, curr_binseq[1:1]) / sum(
+                get_next_alphas(pt, Int[]))
             for j in 2:m
-                dens_cumprod[j] = dens_cumprod[j - 1] * get_alpha(pt, curr_binseq[1:j]) / (
-                    get_alpha(pt, push!(curr_binseq[1:j-1], 0)) + get_alpha(pt, push!(curr_binseq[1:j-1], 1))
-                )
+                dens_cumprod[j] = dens_cumprod[j - 1] * get_alpha(pt, curr_binseq[1:j]) / sum(
+                    get_next_alphas(pt, curr_binseq[1:j-1]))
             end
         else 
             for j in first_diff:m
-                dens_cumprod[j] = dens_cumprod[j - 1] * get_alpha(pt, curr_binseq[1:j]) / (
-                get_alpha(pt, push!(curr_binseq[1:j-1], 0)) + get_alpha(pt, push!(curr_binseq[1:j-1], 1))
-            )
+                dens_cumprod[j] = dens_cumprod[j - 1] * get_alpha(pt, curr_binseq[1:j]) / sum(
+                    get_next_alphas(pt, curr_binseq[1:j-1]))
             end
         end
         # out[i] = dens_cumprod[end] / get_length(pt, curr_binseq)
@@ -119,3 +142,47 @@ function predictive_density(xgrid::Array{Float64}, gfpt::GFPT1, proba_threshold=
     return out
     # return out / sum(out * (xgrid[2] - xgrid[1]))
 end
+
+
+function sample_pt_density(xgrid::Array{Float64}, gfpt::GFPT1)
+    depth = rand(Categorical(gfpt.prob_n))
+
+
+    trunc_partition = NestedPartitions(
+        depth, 
+        gfpt.pt.partition.base, 
+        gfpt.pt.partition.levels[1:depth],
+        gfpt.pt.partition.lengths[1:depth],
+    )
+
+    pt = PolyaTree(
+        trunc_partition,
+        gfpt.pt.base,
+        gfpt.pt.alphas[1:depth],
+        gfpt.pt.counts[1:depth],
+        )
+
+    return sample_pt_density(xgrid, pt)
+end
+
+
+function sample_log_lik(data::Vector{Float64}, gfpt::GFPT1)
+    perm = sortperm(data)
+    inverse_perm = invperm(perm)
+    sorted_data = data[perm]
+
+    log_liks = log.(sample_pt_density(sorted_data, gfpt))
+
+    return log_liks[inverse_perm]
+end
+
+
+function log_lik_chain(data::Vector{Float64}, gfpt::GFPT1, N_MC=1000)
+    out = zeros(N_MC, length(data))
+    for (i, pt) in enumerate(pt_chain)
+        out[i, :] .=  sample_log_lik(data, gfpt)
+    end
+
+    return out
+end
+

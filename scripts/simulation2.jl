@@ -7,11 +7,11 @@ using Random
 @add using Distributions
 @add using DataFrames
 @add using Serialization
-
+@add using ProgressBars
 
 
 NREP = 96
-NDATAS = [50, 100, 250, 500] #, 750, 1000]
+NDATAS = 1000
 XGRID = collect(LinRange(1e-8, 1-1e-8, 1000))
 
 Random.seed!(20241004)
@@ -39,16 +39,17 @@ TRUE_DENS = [pdf.(d, XGRID) for d in DG]
 
 MAX_DEPTH = 8
 PRIORS = [
-    ("GFPT1", 0.05, -1, false),
     ("GFPT1", 0.1, -1, false),
-    ("GFPT2", 0.1, 0.5, true),
-    ("GFPT2", 0.1, 1.0, true),
-    ("GFPT2", 0.1, 2.0, true),
-    ("GFPT2", 0.1, 5.0, true),
+    # ("GFPT2", 0.1, 0.5, true),
+    # ("GFPT2", 0.1, 1.0, true),
+    # ("GFPT2", 0.1, 2.0, true),
+    # ("GFPT2", 0.1, 5.0, true),
     ("GFPT2", 0.1, 0.5, false),
-    ("GFPT2", 0.1, 1.0, false),
     ("GFPT2", 0.1, 2.0, false),
-    ("GFPT2", 0.1, 5.0, false)
+    ("GFPT2", 0.1, 5.0, false),
+    ("GFPT2", 2.0, 0.5, false),
+    ("GFPT2", 2.0, 2.0, false),
+    ("GFPT2", 2.0, 5.0, false)
 ]
 
 
@@ -64,7 +65,7 @@ end
 
 
 function get_posterior_summaries(pt::GFPT2, data)
-    mcmc_chain = run_mcmc(data, pt, 1000, 500, 1);
+    mcmc_chain = run_mcmc(data, pt, 10000, 1000, 1);
     pred_dens = predictive_density(XGRID, mcmc_chain)
     post_n_proba = zeros(MAX_DEPTH)
     for tree in mcmc_chain
@@ -95,16 +96,26 @@ function run_one_iter(iternum)
                 model = build_model(prior...)
                 data = rand(data_distribution, ndata)
 
-                post_n, pred_dens = get_posterior_summaries(model, data)
+                try
 
-                # Compute summaries
-                l1 = l1_dist(TRUE_DENS[i], pred_dens, XGRID)
-                length = arclength(TRUE_DENS[i] - pred_dens, XGRID)
+                    post_n, pred_dens = get_posterior_summaries(model, data)
 
-                out = push!(
-                    out,
-                    (prior..., i, ndata, l1, length, post_n, iternum)
-                )
+                    if abs(sum(pred_dens) * (XGRID[2] - XGRID[1]) - 1) > 0.1
+                        continue
+                    end
+
+                    # Compute summaries
+                    l1 = l1_dist(TRUE_DENS[i], pred_dens, XGRID)
+                    length = arclength(TRUE_DENS[i] - pred_dens, XGRID)
+
+                    out = push!(
+                        out,
+                        (prior..., i, ndata, l1, length, post_n, iternum)
+                    )
+
+                catch e
+                    continue
+                end
             end
         end
     end
@@ -119,12 +130,21 @@ function run_one_iter(iternum)
 end
 
 
+# function main()
+#     println("main")
+#     iternum = parse(Int, ARGS[1])
+#     Random.seed!(SEEDS[iternum])
+#     out = run_one_iter(iternum)
+#     Serialization.serialize("out/simulation2_"*string(iternum)*".dta", out)
+# end
+
 function main()
-    println("main")
-    iternum = parse(Int, ARGS[1])
-    Random.seed!(SEEDS[iternum])
-    out = run_one_iter(iternum)
-    Serialization.serialize("out/simulation2_"*string(iternum)*".dta", out)
+    tmp =  Array{DataFrame}(undef, NREP)
+    @Threads.threads for i in ProgressBar(1:NREP)
+        tmp[i] = run_one_iter(i)
+    end
+    out = reduce(vcat, tmp)
+    Serialization.serialize("simulation2_results.dta", out)
 end
 
 main()
