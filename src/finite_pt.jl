@@ -10,6 +10,17 @@ using AddPackage
 @add using NNlib
 @add using IterTools
 
+"""
+    PolyaTree
+
+Finite Polya tree prior used for density estimation.
+
+# Fields
+- `partition::NestedPartitions`: partition structure on `[0,1]`.
+- `base::Int`: branching factor of the tree.
+- `alphas::Array{Array{Float64,1},1}`: Dirichlet parameters for each level.
+- `counts::Array{Array{Float64,1},1}`: observed counts per partition cell.
+"""
 mutable struct PolyaTree
     # state
     partition::NestedPartitions
@@ -22,6 +33,13 @@ end
 
 # Constructors
 
+"""
+    PolyaTree(p::NestedPartitions, alpha0=1, base=2)
+
+Create a `PolyaTree` on the provided `NestedPartitions` object.  The array of
+Dirichlet parameters at level `l` is initialised to `alpha0 * l^2` for each
+cell and the count arrays are set to zero.
+"""
 function PolyaTree(p::NestedPartitions, alpha0=1, base=2)
     a = Array{Array{Float64,1},1}()
     c = Array{Array{Float64,1},1}()
@@ -33,7 +51,13 @@ function PolyaTree(p::NestedPartitions, alpha0=1, base=2)
     return PolyaTree(p, base, a, c)
 end
 
+"""
+    PolyaTree(depth::Int64, alpha0=1, base=2)
 
+Construct a `PolyaTree` with `depth` levels and uniform partitions of the
+unit interval.  This is a convenience wrapper around
+`PolyaTree(NestedPartitions(...))`.
+"""
 function PolyaTree(depth::Int64, alpha0=1, base=2)
 
     partitions = Vector{SimplePartition}()
@@ -46,6 +70,13 @@ function PolyaTree(depth::Int64, alpha0=1, base=2)
 end
 
 
+"""
+    BenfordPT(depth::Int64, alphas::Vector{Float64}, base::Int64=10)
+
+Construct a `PolyaTree` whose prior probabilities follow Benford's law for the
+first digit.  The vector `alphas` controls the strength of the prior at each
+level and must have length equal to `depth`.
+"""
 function BenfordPT(depth::Int64, alphas::Vector{Float64}, base::Int64=10)
     if (length(alphas) != depth)
         throw("Length of alphas must be equal to depth")
@@ -95,6 +126,12 @@ function BenfordPT(depth::Int64, alphas::Vector{Float64}, base::Int64=10)
 end
 
 
+"""
+    joint_benford_probas(num_digits, base::Int64=10)
+
+Return a vector of arrays containing the joint Benford probabilities for
+`num_digits` digits in the given `base`.
+"""
 function joint_benford_probas(num_digits, base::Int64=10)
     out = Array{Array{Float64,1},1}()
     for l in 1:num_digits
@@ -120,6 +157,12 @@ end
 
 # POSTERIOR
 
+"""
+    update(data::Vector{Float64}, pt::PolyaTree)
+
+Return the posterior `PolyaTree` after observing the vector of data points
+`data`.
+"""
 function update(data::Vector{Float64}, pt::PolyaTree)
     pt_to_interval = mapreduce(
         permutedims, vcat, find_intervals.(data, Ref(pt.partition)))
@@ -138,25 +181,44 @@ end
 
 # PREDICTIVE
 
+"""
+    get_alpha(pt::PolyaTree, binseq::Vector{Int})
+
+Retrieve the Dirichlet parameter corresponding to a path `binseq` in the tree.
+"""
 function get_alpha(pt::PolyaTree, binseq::Vector{Int})
     return get_from_binseq(pt.alphas, binseq, pt.base)
 end
 
+"""
+    get_next_alphas(pt::PolyaTree, binseq::Vector{Int})
+
+Return the Dirichlet parameters of the children of the node specified by
+`binseq`.
+"""
 function get_next_alphas(pt::PolyaTree, binseq::Vector{Int})
     out = [get_from_binseq(pt.alphas, [binseq; i], pt.base) for i in 0:(pt.base-1)]
     return out
 end
 
+"""
+    get_length(pt::PolyaTree, binseq::Vector{Int})
+
+Length of the interval associated with `binseq` in the partition.
+"""
 function get_length(pt::PolyaTree, binseq::Vector{Int})
     l =  get_from_binseq(pt.partition.lengths, binseq, pt.base)
     return l
 end
 
 
+"""
+    predictive_density(xgrid::Vector{Float64}, pt::PolyaTree)
+
+Evaluate the predictive density of `pt` on the grid `xgrid`.  The grid must be
+sorted and equispaced.
+"""
 function predictive_density(xgrid::Array{Float64}, pt::PolyaTree)
-    """
-    We assume xgrid is already sorted and equispaced
-    """
     idxs = find_intervals.(xgrid, Ref(pt.partition))
     out = zeros(length(xgrid))
     m = pt.partition.depth
@@ -201,6 +263,11 @@ function predictive_density(xgrid::Array{Float64}, pt::PolyaTree)
 end
 
 
+"""
+    sample_pt_density(xgrid, pt)
+
+Draw a random density from the Polya tree prior and evaluate it on `xgrid`.
+"""
 function sample_pt_density(xgrid, pt)
     probas = sample_dirichlet_sequence(pt.alphas)
 

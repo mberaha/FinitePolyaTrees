@@ -1,17 +1,32 @@
 using SpecialFunctions
 
 
+"""
+    bit_to_int(arr; base=2)
+
+Convert an array of digits `arr` in given `base` to an integer.
+"""
 function bit_to_int(arr, base=2)
     return Int(sum(arr .* (base .^ collect(length(arr)-1:-1:0))))
 end
 
 
+"""
+    get_from_binseq(x, binseq; base=2)
+
+Return `x` indexed by the binary sequence `binseq`.
+"""
 function get_from_binseq(x, binseq::Array{Int}, base=2)
     level = length(binseq)
     return x[level][bit_to_int(binseq, base) + 1]
 end
 
 
+"""
+    lengths_from_relative_lengths(rel_lengths)
+
+Compute absolute lengths from relative split proportions.
+"""
 function lengths_from_relative_lengths(rel_lengths::Vector{Vector{Float64}})
     lengths = Vector{Vector{Float64}}()
     depth = length(rel_lengths)
@@ -29,6 +44,11 @@ function lengths_from_relative_lengths(rel_lengths::Vector{Vector{Float64}})
 end
 
 
+"""
+    endpoints_from_lengths(lengths)
+
+Convert lengths at each level to cumulative endpoints.
+"""
 function endpoints_from_lengths(lengths::Vector{Vector{Float64}})
     endpoints = Vector{Vector{Float64}}()
     depth = length(lengths)
@@ -42,6 +62,11 @@ function endpoints_from_lengths(lengths::Vector{Vector{Float64}})
 end
 
 
+"""
+    sample_beta_sequence(params)
+
+Draw independent beta random variables for each pair of parameters.
+"""
 function sample_beta_sequence(params::Vector{Vector{Float64}})
     depth = length(params)
     out = Vector{Vector{Float64}}()
@@ -52,6 +77,11 @@ function sample_beta_sequence(params::Vector{Vector{Float64}})
     return out
 end
 
+"""
+    rand_ext_dirichlet(params)
+
+Dirichlet sampler that gracefully handles zero parameters.
+"""
 function rand_ext_dirichlet(params)
     out = zeros(length(params))
     if sum(params) > 0
@@ -62,6 +92,11 @@ function rand_ext_dirichlet(params)
 end
 
 
+"""
+    sample_dirichlet_sequence(params)
+
+Sample Dirichlet vectors level by level using `params`.
+"""
 function sample_dirichlet_sequence(params::Vector{Vector{Float64}})
     depth = length(params)
     base = length(params[1])
@@ -76,6 +111,11 @@ function sample_dirichlet_sequence(params::Vector{Vector{Float64}})
 end
 
 
+"""
+    get_subarrays(x)
+
+Return all leading subarrays of `x`.
+"""
 function get_subarrays(x)
     out = []
     for i in 1:length(x)
@@ -85,11 +125,21 @@ function get_subarrays(x)
 end
 
 
+"""
+    log_mv_beta(x)
+
+Multivariate beta function on the log scale.
+"""
 function log_mv_beta(x)
     return sum(loggamma.(x)) - loggamma(sum(x))
 end
 
 
+"""
+    order_of_magnitude(x; base=10)
+
+Return the integer order of magnitude of `x` in the given base.
+"""
 function order_of_magnitude(x::Real, base=10)
     if x <= 0
         throw(ArgumentError("x must be positive"))
@@ -98,6 +148,11 @@ function order_of_magnitude(x::Real, base=10)
 end
 
 
+"""
+    scale_and_magnitudes(data; base=10)
+
+Scale `data` to the interval `(0.1, 1]` and return their magnitudes.
+"""
 function scale_and_magnitudes(data::Vector{Float64}, base=10)
     # Compute orders of magnitude (integer part of log10)
     magnitudes = floor.(Int, log.(base, abs.(data)))
@@ -109,6 +164,11 @@ function scale_and_magnitudes(data::Vector{Float64}, base=10)
 end
 
 
+"""
+    compute_waic(L)
+
+Compute the WAIC given a matrix of log-likelihood values `L`.
+"""
 function compute_waic(L::AbstractMatrix)
     M, n = size(L)  # M = number of iterations, n = number of datapoints
     lppd = 0.0      # log pointwise predictive density

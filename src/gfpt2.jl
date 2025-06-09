@@ -7,6 +7,23 @@ include("utils.jl")
 
 
 
+"""
+    GFPT2
+
+Alternative implementation of the Gaussian finite Polya tree using beta
+distributed partition lengths.
+
+# Fields
+- `partition_relative_lengths` : sampled beta variables controlling the split
+  proportions.
+- `partition_endpoints` : cumulative endpoints derived from the lengths.
+- `partition_lengths` : lengths of each interval in the partition.
+- `counts` : observed counts per cell.
+- `prior_prob_n` : prior probabilities on the depth.
+- `prior_alphas`, `prior_betas` : hyperparameters of the beta distributions.
+- `curr_alphas` : current posterior alpha parameters.
+- `curr_n` : current sampled depth.
+"""
 mutable struct GFPT2
     partition_relative_lengths::Vector{Vector{Float64}}
     partition_endpoints::Vector{Vector{Float64}}
@@ -21,6 +38,12 @@ mutable struct GFPT2
     curr_n::Int64
 end
 
+"""
+    GFPT2(partition_relative_lengths, partition_endpoints, partition_lengths,
+          counts, prob_n, prior_alphas, prior_betas)
+
+Internal constructor used when all components are already available.
+"""
 function GFPT2(partition_relative_lengths, partition_endpoints, partition_lengths, counts,
               prob_n, prior_alphas, prior_betas)
 
@@ -34,6 +57,13 @@ end
 
 # COSTRUCTORS
 
+"""
+    GFPT2(prior_n::Distribution, max_n::Int64; alpha0=1, beta0=1, increasing_beta=false)
+
+Create a `GFPT2` model with depth up to `max_n` and prior on the depth given by
+`prior_n`. `alpha0` and `beta0` control the beta prior on the partition lengths.
+If `increasing_beta` is true the beta parameters grow with depth.
+"""
 function GFPT2(prior_n::Distribution, max_n=Int64,
                alpha0=1, beta0=1, increasing_beta=false)
 
@@ -73,6 +103,12 @@ end
 
 # POSTERIOR
 
+"""
+    update_counts_and_alphas(data, endpoints, pt)
+
+Compute posterior counts and alpha parameters given `data` and a set of
+partition `endpoints`.
+"""
 function update_counts_and_alphas(data, endpoints, pt)
     function intervals_from_endpoints(x, endpoints)
         depth = length(endpoints)
@@ -103,6 +139,11 @@ function update_counts_and_alphas(data, endpoints, pt)
 
 end
 
+"""
+    update_counts_and_alphas_parallel(data, endpoints, pt)
+
+Threaded version of `update_counts_and_alphas`.
+"""
 function update_counts_and_alphas_parallel(data, endpoints, pt)
     depth = length(endpoints)
     ndata = length(data)
@@ -158,6 +199,11 @@ function update_counts_and_alphas_parallel(data, endpoints, pt)
 end
 
 
+"""
+    sample_n!(data, pt::GFPT2)
+
+Gibbs step for sampling the depth parameter `n`.
+"""
 function sample_n!(data, pt::GFPT2)
     depth = length(pt.prior_prob_n)
     
@@ -178,6 +224,11 @@ function sample_n!(data, pt::GFPT2)
     return pt
 end
 
+"""
+    marg_log_lik(alphas, lengths, counts)
+
+Compute the marginal log-likelihood for the Polya tree parameters.
+"""
 function marg_log_lik(alphas, lengths, counts)
     log_num = 0
     depth = length(alphas)
@@ -192,6 +243,11 @@ function marg_log_lik(alphas, lengths, counts)
     return log_num - log_den
 end
 
+"""
+    sample_r!(data, pt::GFPT2)
+
+Metropolis--Hastings step for sampling new partition lengths.
+"""
 function sample_r!(data, pt::GFPT2)
     max_n = length(pt.prior_prob_n)
     curr_n = pt.curr_n
@@ -228,6 +284,11 @@ function sample_r!(data, pt::GFPT2)
     return pt
 end
 
+"""
+    run_mcmc(data, pt, burnin, iter; thin=1)
+
+Run the MCMC sampler for the `GFPT2` model.
+"""
 function run_mcmc(data, pt, burnin, iter, thin=1)
 
     pt.counts, pt.curr_alphas = update_counts_and_alphas_parallel(
@@ -253,10 +314,13 @@ end
 
 
 # PREDICTIVE
+"""
+    predictive_density(xgrid::Vector{Float64}, gfpt::GFPT2)
+
+Predictive density of a single `GFPT2` draw evaluated on `xgrid`.
+`xgrid` must be sorted.
+"""
 function predictive_density(xgrid::Array{Float64}, gfpt::GFPT2)
-    """
-    We assume xgrid is already sorted
-    """
 
     n = gfpt.curr_n
     partitions = NestedPartitions(
@@ -267,6 +331,11 @@ function predictive_density(xgrid::Array{Float64}, gfpt::GFPT2)
 end
 
 
+"""
+    predictive_density(xgrid::Vector{Float64}, pt_chain::Vector{GFPT2})
+
+Average predictive density over a chain of `GFPT2` draws.
+"""
 function predictive_density(xgrid::Array{Float64}, pt_chain=Vector{GFPT2})
     pred_dens = zeros(length(xgrid))
 
@@ -277,6 +346,12 @@ function predictive_density(xgrid::Array{Float64}, pt_chain=Vector{GFPT2})
 end
 
 
+"""
+    log_lik(data::Vector{Float64}, gfpt::GFPT2)
+
+Compute the log-likelihood of `data` under the predictive distribution of
+`gfpt`.
+"""
 function log_lik(data::Vector{Float64}, gfpt::GFPT2)
     perm = sortperm(data)
     inverse_perm = invperm(perm)
@@ -288,6 +363,11 @@ function log_lik(data::Vector{Float64}, gfpt::GFPT2)
 end
 
 
+"""
+    log_lik_chain(data::Vector{Float64}, pt_chain::Vector{GFPT2})
+
+Return the matrix of log-likelihoods for `data` across a chain of draws.
+"""
 function log_lik_chain(data::Vector{Float64}, pt_chain=Vector{GFPT2}, N_MC=-1)
     out = zeros(length(pt_chain), length(data))
     @threads for i in 1:length(pt_chain)
