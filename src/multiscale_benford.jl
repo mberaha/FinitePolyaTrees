@@ -29,6 +29,24 @@ function MultiscaleBPT(
 end
 
 
+function MultiscaleGFPT1(
+        prior_n::Distribution, max_n::Int64, alpha0::Float64, 
+        etas::Vector{Float64}, min_order=0, base=10)
+
+    alphas = Vector{Float64}()
+    for l in 1:max_n
+        alphas = push!(alphas, alpha0 * l^2)
+    end
+
+    return MultiscaleBPT(
+        GFPT1(prior_n, max_n, alpha0, base), 
+        etas, 
+        min_order, 
+        min_order + length(etas) - 1,
+        base)
+end
+
+
 function update(data::Vector{Float64}, pt::MultiscaleBPT)
     scaled_data, magnitudes = scale_and_magnitudes(data, pt.base)
 

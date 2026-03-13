@@ -1,0 +1,27 @@
+julia> using Distributions
+ERROR: IOError: stat("/tmp/root/spack-stage/spack-stage-julia-1.9.3-pyhqeclwsvfitpuqokyqyrjgqdlw4uga/spack-src/usr/share/julia/stdlib/v1.9/Statistics/src/Statistics.jl"): permission denied (EACCES)
+Stacktrace:
+  [1] uv_error
+    @ ./libuv.jl:100 [inlined]
+  [2] stat(path::String)
+    @ Base.Filesystem ./stat.jl:152
+  [3] samefile
+    @ ./stat.jl:476 [inlined]
+  [4] stale_cachefile(modkey::Base.PkgId, build_id::UInt128, modpath::String, cachefile::String; ignore_loaded::Bool)
+    @ Base ./loading.jl:2818
+  [5] stale_cachefile
+    @ ./loading.jl:2717 [inlined]
+  [6] _require_search_from_serialized(pkg::Base.PkgId, sourcepath::String, build_id::UInt128)
+    @ Base ./loading.jl:1465
+  [7] _require(pkg::Base.PkgId, env::String)
+    @ Base ./loading.jl:1783
+  [8] _require_prelocked(uuidkey::Base.PkgId, env::String)
+    @ Base ./loading.jl:1660
+  [9] macro expansion
+    @ ./loading.jl:1648 [inlined]
+ [10] macro expansion
+    @ ./lock.jl:267 [inlined]
+ [11] require(into::Module, mod::Symbol)
+    @ Base ./loading.jl:1611
+
+

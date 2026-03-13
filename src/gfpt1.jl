@@ -144,9 +144,8 @@ function predictive_density(xgrid::Array{Float64}, gfpt::GFPT1, proba_threshold=
 end
 
 
-function sample_pt_density(xgrid::Array{Float64}, gfpt::GFPT1)
+function sample_pt_density(xgrid::Vector{Float64}, gfpt::GFPT1, return_proba=false)
     depth = rand(Categorical(gfpt.prob_n))
-
 
     trunc_partition = NestedPartitions(
         depth, 
@@ -154,7 +153,7 @@ function sample_pt_density(xgrid::Array{Float64}, gfpt::GFPT1)
         gfpt.pt.partition.levels[1:depth],
         gfpt.pt.partition.lengths[1:depth],
     )
-
+    
     pt = PolyaTree(
         trunc_partition,
         gfpt.pt.base,
@@ -162,7 +161,14 @@ function sample_pt_density(xgrid::Array{Float64}, gfpt::GFPT1)
         gfpt.pt.counts[1:depth],
         )
 
-    return sample_pt_density(xgrid, pt)
+    out_dens,logproba = sample_pt_density(xgrid, pt, true)
+
+    if return_proba
+        logproba += log(gfpt.prob_n[depth])
+        return out_dens, logproba
+    end
+
+    return out_dens
 end
 
 
