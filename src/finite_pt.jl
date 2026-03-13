@@ -201,7 +201,7 @@ function predictive_density(xgrid::Array{Float64}, pt::PolyaTree)
 end
 
 
-function sample_pt_density(xgrid, pt)
+function sample_pt_density(xgrid, pt::PolyaTree, return_proba=false)
     probas = sample_dirichlet_sequence(pt.alphas)
 
     idxs = find_intervals.(xgrid, Ref(pt.partition))
@@ -238,5 +238,13 @@ function sample_pt_density(xgrid, pt)
         out[i] = dens_cumprod[end] / get_length(pt, curr_binseq)
         old_binseq = curr_binseq
     end
+
+    out_dens = out
+
+    if return_proba
+        out_proba = logprob_dirichlet_sequence(pt.alphas, probas)
+        return out_dens, out_proba
+    end
+
     return out
 end

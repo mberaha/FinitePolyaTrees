@@ -76,6 +76,22 @@ function sample_dirichlet_sequence(params::Vector{Vector{Float64}})
 end
 
 
+function logprob_dirichlet_sequence(x::Vector{Vector{Float64}},
+                                    params::Vector{Vector{Float64}})
+    depth = length(params)
+    base = length(params[1])
+    out = 0.0
+    for d in 1:depth
+        for i in 1:base:length(params[d])
+            curr_alphas = params[d][i:i+(base-1)]
+            curr_x = x[d][i:i+(base-1)]
+            out += logpdf(Dirichlet(curr_alphas), curr_x)
+        end
+    end
+    return out
+end
+
+
 function get_subarrays(x)
     out = []
     for i in 1:length(x)
